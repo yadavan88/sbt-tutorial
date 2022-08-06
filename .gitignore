@@ -5,3 +5,5 @@
 .vscode/**
 project/**
 !project/build.properties
+!project/plugins.sbt
+!project/CustomTaskPrinter.scala

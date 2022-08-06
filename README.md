@@ -42,12 +42,14 @@ Once we add a name to the project, the sbt console will use the project name whe
 ### Project Structure
 A simple standard sbt project follows the below structure (assume that the directory is _simpleProject_):
 
+```
 simpleProject
   |-- src
         |--- main/scala
         |--- test/scala
   |-- project
   |-- build.sbt
+  ```
 
 The scala code and configurations are placed under _main_ or _test_ subdirectories. The _project_ is an optional directory that contains additional setting files needed for configuring the sbt project. 
 
@@ -192,3 +194,112 @@ However, as of now there is no relationship between any of the modules. We can e
 lazy val root = (project in file("."))
   .aggregate(util, core)
 ```
+
+In the same way, we can define dependency between multiple submodules. We can make module-2 to depend on module-1 using dependsOn method:
+
+```
+lazy val module_2 = (project in file("module-2")).dependsOn(module_1)
+```
+
+We can also provide settings for each sub module differently using the settings method:
+
+```
+lazy val module_2 = (project in file("module-2")).settings(
+  libraryDependencies += "com.typesafe" % "config" % "1.4.2"
+)
+```
+
+### Executing commands on each Module
+Now that we are ready with a multi module project, let's see how we can execute sbt commands module wise. 
+On the root of the project, if we execute _sbt_ it will start the sbt session. When we run the compile command, it will compile all the modules.
+
+Once we are isnide sbt session, we can switch to a particular sub-module using:
+```
+project module_2
+```
+Now, when we compile, only this module will get compiled. But, if this module depends on another module, sbt will compile that module as well.
+
+### Plugins
+One of the most important features of SBT is its support for plugins. Plugins helps to extend the sbt with custom features which can be published and shared between multiple teams. 
+For handling plugins, a special file called as _plugins.sbt_ is used. This file is kept under that directory _project_. Some of the common usages of plugins are:
+ - packaging plugins to create jar, exe and other types
+ - static code analysis plugins
+ - code generation plugins
+
+ Let's look at an example of _sbt-assembly_ plugin. This plugin helps to create an executable jar file from the sbt project. 
+
+ As a first step, we need to create _plugins.sbt_ and add the plugin definition to it:
+ ```
+ addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "1.2.0")
+ ```
+ As next step, we need to enable the required configurations needed for this plugin to work. To run a jar, we need to provide the main class to use. We can do that by providing the mainClass in the settings in build.sbt for required module(sometimes, we need to create jar for a sub module, sometime for the  combined project)
+
+ ```
+assembly / mainClass := Some("com.rockthejvm.Module2Main"),
+ ```
+
+ Now we can use the sbt command `assembly`. This will create the jar file under the relevabt project's target folder. 
+ Similar to `assembly/mainClass` there are many other configurations to customise the jar creation.
+
+ ### Global plugins
+ In the previous section, we added the plugin to the project. Sometimes, we might need to add some plugins irrespective of the project. For example, there may be some plugin to publish the apps to an internal repository. This need not be kept in the git repo, instead can be shared across all the repositories. 
+ SBT allows to do this using global plugins. 
+
+ Instead of keeping the _plugins.sbt_ within the project, we can create the file in the .sbt path. 
+ ```
+ $HOME/.sbt/1.0/plugins
+ ```
+ When sbt starts, it will load all the plugins from the global path. For example, in our previous example, We can remove the plugins.sbt from the _project_ directory and keep it in the above path. On reloading the project, it will still load the plugin, but from the global path instead. 
+ You can notice in the sbt statrup logs with some similar logs like:
+ ```
+ [info] loading global plugins from /Users/username/.sbt/1.0/plugins
+ ```
+
+ ### Resolvers
+ So far, all the library dependencies and plugins are downloaded from the maven central repsitory. Sometimes, we need to use other thirdparty repository for downloading libraries/plugins. To do that, we can provide resolvers in the _.sbt_ files.
+ ```
+resolvers += Resolver.url("my-test-repo", url("https://example.org/repo-releases/"))
+ ```
+Now, apart from maven central, sbt will also look at the provided location for libraries. Similarly, we can add any number of resolvers. 
+But note that as the number of resolvers increases, sbt might take more time to startup as it might need to look at all the configured repositories before failing.
+
+### Custom Tasks
+Another poewrfule feature of sbt is the ability to create custom tasks. Apart from the in-built task keys, we  can easily create new ones. For example, we can create a custom task to do some particular operation. 
+
+For exaplaining, let's create a task which will just print some text to console. 
+For that, we can create a scala file which does the printng logic and keep this file under _project_ directory:
+```
+object CustomTaskPrinter {
+  def print() = {
+    println("Rock the SBT custom task is here....")
+  }
+}
+
+```
+Next, we can define a custom task in the build.sbt file as:
+```
+lazy val printerTask = taskKey[Unit]("Simple custom task")
+```
+
+The custom command will be `printerTask`. 
+Now, we can define the logic of the custom task in the build.sbt again:
+```
+printerTask := {
+    CustomTaskPrinter.print()
+}
+```
+
+After this, we can relaod sbt and execute the command `printerTask`. This will print the simple message we created before into the console.
+
+### Command Alias
+Another advaced feature sbt supports is the ability to set aliases. This is similar to the alias we create on unix based OSs. 
+
+```
+addCommandAlias("ci", ";clean; compile;test; assembly;")
+```
+
+Now, in sbt console, we can execute just `ci`. This will automatically execute the configured commands in the order it is defined in the alias _ci_
+
+### Giter Templates
+SBT supports quick project bootstrap using giter(g8) templates. We can just execute the command `sbt new <template>` to create a new project based on the template. 
+by default, we can only use the templates available under the official g8 repo. However, we can also point to any custom g8 github path to create the project from that template. 
