@@ -209,6 +209,44 @@ lazy val module_2 = (project in file("module-2")).settings(
 )
 ```
 
+### Multi-Module Build Best Practises
+We need to first identify and get clarity on different modules. Let's assume that we are building an application that contains database access, HTTP services, utilities etc. 
+Each of these can be separated as a  module. Then we can combine the different parts if one is dependant on another.
+
+Some of the best practices are:
+- single build.sbt file and provide all sub-module information in that sbt file.
+- Extract the common settings and keep them at beginning (for example, if we are intending to use same scala version for all sub-modules, it is better to be defined at once as full build settings. This will make it easy to update. The same with settings like org name, version numbers etc.) Use the special method `ThisBuild` to ensure that the setting is applied to the entire project.
+
+```
+ThisBuild / organization = "com.rockthejvm"
+```
+This will apply the same organisation to all the sub-modules in this project.
+
+- Extract the same setting needed across multiple sub-modules into a single variable and apply them in the settings. 
+For example, if we need to change the target directory name for some of the modules, we can create a setting and apply to only the relevant modules as:
+```
+lazy val commonSettings = Seq(
+  target := { baseDirectory.value / "target2" }
+)
+lazy val module_1 = (project in file("module-1"))
+  .settings(
+    commonSettings,
+    // other settings
+  )
+```
+
+- IN the similar way, extract the common dependency libraries into a single place and re-use. 
+```
+val commonLibs = Seq(
+  "com.typesafe" % "config" % "1.4.2"
+)
+
+lazy val module_2 = (project in file("module-2"))
+.settings(
+  libraryDependencies ++= commonLibs ++ Seq("com.lihaoyi" %% "fansi" % "0.4.0")
+)
+```
+
 ### Executing commands on each Module
 Now that we are ready with a multi module project, let's see how we can execute sbt commands module wise. 
 On the root of the project, if we execute _sbt_ it will start the sbt session. When we run the compile command, it will compile all the modules.
@@ -241,6 +279,8 @@ assembly / mainClass := Some("com.rockthejvm.Module2Main"),
  Now we can use the sbt command `assembly`. This will create the jar file under the relevabt project's target folder. 
  Similar to `assembly/mainClass` there are many other configurations to customise the jar creation.
 
+ This is just one of the plugins. There are many plugins available which can help to improve the development experience.
+
  ### Global plugins
  In the previous section, we added the plugin to the project. Sometimes, we might need to add some plugins irrespective of the project. For example, there may be some plugin to publish the apps to an internal repository. This need not be kept in the git repo, instead can be shared across all the repositories. 
  SBT allows to do this using global plugins. 
@@ -260,13 +300,30 @@ assembly / mainClass := Some("com.rockthejvm.Module2Main"),
  ```
 resolvers += Resolver.url("my-test-repo", url("https://example.org/repo-releases/"))
  ```
-Now, apart from maven central, sbt will also look at the provided location for libraries. Similarly, we can add any number of resolvers. 
+Now, apart from maven central, sbt will also look at the provided location for libraries. 
+We can also add resolver as the local maven directory. For that, we can use the resolver setting as:
+ ```
+resolvers += Resolver.mavenLocal 
+```
+This will look for the dependencies in the `.m2` directory.
+
+Apart from maven, we can also configure other services to resolve the libraries. For example, to use a sonatype repo, we can use:
+```
+resolvers += Resolver.sonatypeRepo("releases") 
+```
+We can also provide custom location for the resolvers. For example, we can configure a customised central location for the repositories as:
+```
+resolvers += Resolver.url("my-company-repo", url("https://mycompany.org/repo-releases/"))
+```
+
+Similarly, we can add any number of resolvers. 
 But note that as the number of resolvers increases, sbt might take more time to startup as it might need to look at all the configured repositories before failing.
 
 ### Custom Tasks
 Another poewrfule feature of sbt is the ability to create custom tasks. Apart from the in-built task keys, we  can easily create new ones. For example, we can create a custom task to do some particular operation. 
 
-For exaplaining, let's create a task which will just print some text to console. 
+For exaplaining, let's create a task which will just print some text to console. We can extend this to any complex functionality in the same way. 
+
 For that, we can create a scala file which does the printng logic and keep this file under _project_ directory:
 ```
 object CustomTaskPrinter {
@@ -280,6 +337,7 @@ Next, we can define a custom task in the build.sbt file as:
 ```
 lazy val printerTask = taskKey[Unit]("Simple custom task")
 ```
+The code `taskKey[Unit]` mentions that the task does an action and just returns with a Unit type.
 
 The custom command will be `printerTask`. 
 Now, we can define the logic of the custom task in the build.sbt again:
@@ -290,6 +348,60 @@ printerTask := {
 ```
 
 After this, we can relaod sbt and execute the command `printerTask`. This will print the simple message we created before into the console.
+
+Now, let's create another task to generate a string uuid value:
+
+```
+lazy val uuidStringTask = taskKey[String]("Generate string uuid task")
+uuidStringTask := {
+    StringTask.strTask()
+}
+```
+We will implement the  StringTask as below:
+```
+object StringTask {
+  def strTask(): String = {
+    UUID.randomUUID().toString()
+  }
+}
+```
+
+Now we can use this task within previously created `printerTask` and access the UUID generated in the other  task. Let's modify the printerTask as
+```
+printerTask := {
+    val uuid = uuidStringTask.value
+    println("Generated uuid is : "+uuid)
+    CustomTaskPrinter.print()
+}
+```
+Note that, we used `uuidStringTas.value`. This value method takes the value from the setting and assign to the val uuid.
+
+Now, when we run the command `printerTask`, it will first generate the UUID and then execute printerTask.
+
+So far, we have created custom tasks. Now, let's look at custom settings. Before that, let's understand the difference  between a task and a setting.
+In SBT task is something which executes each time invoked. You can think of it like `def` in scala. 
+Whereas, a setting is evaluated at the start of sbt session and after that it is memoised. It is like `val` in scala. 
+In the similar way, we can create a setting. The only difference is that instead of `taskKey` we will use `settingKey` to define a setting:
+```
+lazy val uuidStringSetting = settingKey[String]("Generate string uuid task")
+uuidStringSetting := {
+    val uuid = StringTask.strTask()
+    println("Evaluating settings... "+uuid)
+    uuid
+}
+``` 
+Now, to see the difference we can modify our previous printertask as:
+```
+printerTask := {
+    val uuid = uuidStringTask.value
+    println("Generated uuid from task:"+uuid)
+    val uuidSetting = uuidStringSetting.value
+    println("Generated uuid from setting:"+uuidSetting)
+    CustomTaskPrinter.print()
+}
+```
+
+Now, when we execute `printerTask`, notice the generated uuid. From task, each time a new UUID value is generated. But from setting, it will print the same value each time. Also, when you start teh sbt session, immediately we can see the print statement `Evaluating settings...` with the same uuid. 
 
 ### Command Alias
 Another advaced feature sbt supports is the ability to set aliases. This is similar to the alias we create on unix based OSs. 
@@ -303,3 +415,26 @@ Now, in sbt console, we can execute just `ci`. This will automatically execute t
 ### Giter Templates
 SBT supports quick project bootstrap using giter(g8) templates. We can just execute the command `sbt new <template>` to create a new project based on the template. 
 by default, we can only use the templates available under the official g8 repo. However, we can also point to any custom g8 github path to create the project from that template. 
+
+### Cross Build between different Scala versions
+Scala releases are not binary compatible with each other. That means, we need to rebuild a library in all the supported versions for the users to use it. 
+Manually doing this is not an easy step. SBT tries to makes this easier by providing a feature sto cross build between different versions.
+To support multiple versions, we can provide the settings as:
+```
+val scala212 = "2.12.16"
+val scala213 = "2.13.5"
+ThisBuild / scalaVersion := scala212
+lazy val crossproject = (project in file("crossproject"))
+  .settings(
+    crossScalaVersions := List(scala212, scala213),
+    // other settings
+  )
+```
+
+Note that, we have mentioned the default version for this project as Scala 2.12 using `ThisBuild/scalaVersion`. So when we compile, it will use scala 2.12. Since we have given the `crossScalaVersions`, we can ask sbt to compile in all supported versions. 
+To do that, we need to add the symbol `+` before sbt command:
+```
++ compile
+```
+When we publish our library, we can use `+ publish` command. This will ensure that all the supported versions of the library are published.
+
