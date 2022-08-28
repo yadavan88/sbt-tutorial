@@ -438,3 +438,26 @@ To do that, we need to add the symbol `+` before sbt command:
 ```
 When we publish our library, we can use `+ publish` command. This will ensure that all the supported versions of the library are published.
 
+### SBT Advanced Configurations and Options
+SBT has many configuration options and argument passing on startup. Let's look at some of the important ones.
+
+__Check SBT Version__
+To check which version of sbt we are using, we can run the command:
+```
+sbt --version
+```
+
+__View Applied SBT Options__
+We can view all the applied options to SBT using the debug command. 
+```
+sbt --debug
+```
+This will show a list of arguments and options applied to the sbt on startup. This is very useful in identifying if the correct parameters are applied or not.
+
+Or we can use  `sbt -v` which will also provide more information related to passed arguments, but not all debug logs.
+
+__Passing Arguments on SBT Start__
+We can provide jvm arguments on sbt startup. For example, if we want to increase the heap memory of the sbt process, we can start the sbt with the parameter:
+```
+sbt -v -J-Xmx3600m
+```
