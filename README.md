@@ -461,3 +461,31 @@ We can provide jvm arguments on sbt startup. For example, if we want to increase
 ```
 sbt -v -J-Xmx3600m
 ```
+__SBT Command Alias With JVM Arguments__
+We have see before on how to create SBT command aliases. We can create alias with passing jvm arguments. 
+However, we need to make sure that `fork := true` is set in build.sbt. This setting will ensure that sbt will start a forked jvm and apply the settings.
+Without a fork JVM, the jvm parameters we pass are not considered by the sbt.
+
+Let's see how to do that.
+Let's add the below line to build.sbt after adding fork:
+```
+addCommandAlias(
+  "runSpecial",
+  "; set ThisBuild/javaOptions += \"-Dport=4567\"; run"
+)
+```
+Then, we will update the Main class to read this property and print it:
+```
+val portValue = Option(System.getProperty("port"))
+println("PORT value from argument is: "+portValue)
+```
+
+Next, we need to restart sbt to get these changes to effect. Then run the command `runSpecial`. This will print the passed javaOptions.
+
+If we want to pass multiple javaOptions, we need to use a Seq as:
+addCommandAlias(
+  "runSpecial",
+  "; set ThisBuild/javaOptions ++= Seq(\"-Dport=4567\", \"-Duser=rockthejvm\"); run"
+)
+
+Now when we run `runSpecial`, the value for `user` will be None. But when we run `runSpecial2`, it will have the value for `user` as rockthejvm.
