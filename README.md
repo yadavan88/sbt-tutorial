@@ -83,6 +83,12 @@ In such case, we can use _runMain_ command by passing the class to run as:
 runMain com.rockthejvm.Main 
 ```
 
+SBT also allows to do automatic compilation on any source file change. For that, we can start the compile command prefixed by ~ symbol within the sbt shell:
+```
+~compile
+```
+Now, sbt will track the source files and if any change is detected in the files, it will automatically recompile them.
+
 ### Adding external Dependenncies
 So far, we have created scala files without using any external dependencies. Now, let's look at how we can add additional libraries to our project. We can add the dependencies to out project by adding it to the settings _libraryDependencies_. SBT follows ivy style format to define the dependencies as :
 ```
@@ -99,6 +105,14 @@ libraryDependencies += "com.lihaoyi" % "fansi_2.13" % "0.4.0"
 ``` 
 
 SBT also has triple % symbol (%%%), which is used to resolve ScalaJS libraries.
+
+We can add multiple dependencies together by using ++= and Seq :
+```
+libraryDependencies ++= Seq(
+  "com.lihaoyi" % "fansi_2.13" % "0.4.0"
+  //Can add more depencies here.
+)
+``` 
 
 ### Scala files under project directory
 SBT allows us to keep supporting files for the build as scala files. This helps to configure most of the required configurations in the known format of scala classes. We can place the scala files under the directory _project_. 
@@ -251,7 +265,7 @@ lazy val module_2 = (project in file("module-2"))
 Now that we are ready with a multi module project, let's see how we can execute sbt commands module wise. 
 On the root of the project, if we execute _sbt_ it will start the sbt session. When we run the compile command, it will compile all the modules.
 
-Once we are isnide sbt session, we can switch to a particular sub-module using:
+Once we are inside sbt session, we can switch to a particular sub-module using:
 ```
 project module_2
 ```
